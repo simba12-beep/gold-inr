@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gold in Rupees</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#f7f5f0; --panel:#ffffff; --ink:#1d1a14; --muted:#6b6457; --line:#e4dfd3;
+    --gold:#a87a12; --gold-soft:#f3e7c7; --up:#1f7a4d; --down:#b03a2e;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#14120e; --panel:#1d1a15; --ink:#f1ece0; --muted:#a39b8b; --line:#332e25;
+      --gold:#e0b44a; --gold-soft:#3a2f16; --up:#52c28a; --down:#ef7a6c; color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14120e; --panel:#1d1a15; --ink:#f1ece0; --muted:#a39b8b; --line:#332e25;
+    --gold:#e0b44a; --gold-soft:#3a2f16; --up:#52c28a; --down:#ef7a6c; color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;padding:24px 16px 48px}
+  .wrap{max-width:860px;margin:0 auto;display:grid;gap:20px}
+  header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:12px}
+  h1{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:28px;margin:0;line-height:1.1}
+  .status{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--up)}
+  .dot.err{background:var(--down)} .dot.wait{background:var(--muted)}
+  .num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;display:grid;gap:6px}
+  .label{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .big{font-size:clamp(34px,8vw,52px);font-weight:500;color:var(--gold);line-height:1.1}
+  .sub{color:var(--muted);font-size:14px}
+  .chg.up{color:var(--up)} .chg.down{color:var(--down)}
+  canvas{width:100%;height:70px;display:block;margin-top:8px}
+  .tablebox{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;min-width:440px}
+  th,td{padding:12px 16px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  tr:last-child td{border-bottom:0}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  td strong{font-weight:600}
+  .karat{display:inline-block;background:var(--gold-soft);color:var(--gold);font-weight:600;font-size:13px;padding:2px 8px;border-radius:4px;margin-right:8px}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .field{display:grid;gap:4px}
+  .field label{font-size:12px;color:var(--muted)}
+  input{font:inherit;font-family:"IBM Plex Mono",monospace;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);width:100%}
+  input:focus-visible,button:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+  button{font:inherit;font-weight:500;padding:8px 14px;border-radius:6px;border:1px solid var(--gold);background:var(--gold);color:var(--bg);cursor:pointer}
+  .note{font-size:13px;color:var(--muted);max-width:65ch}
+  .src{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Gold in Rupees</h1>
+    <div class="status"><span class="dot wait" id="dot"></span><span id="status">Loading…</span></div>
+  </header>
+
+  <section class="hero">
+    <div class="label">24K · 10 grams · incl. duty &amp; tax</div>
+    <div class="big num" id="hero10">—</div>
+    <div class="sub"><span class="num" id="heroGram">—</span> per gram · <span class="chg num" id="chg"></span></div>
+    <canvas id="spark" aria-label="Price since page opened"></canvas>
+  </section>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Purity</th><th>Per gram</th><th>10 grams</th><th>Per gram (spot, no tax)</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <section class="controls">
+    <div class="field"><label for="duty">Govt duty + tax %</label><input id="duty" type="number" step="0.1" value="15"></div>
+    <div class="field"><label for="fxOverride">USD/INR override (blank = live)</label><input id="fxOverride" type="number" step="0.01" placeholder="auto"></div>
+    <div class="field"><label for="alertAt">Alert when 24K/10g crosses ₹</label><input id="alertAt" type="number" step="100" placeholder="e.g. 150000"></div>
+    <div class="field"><label for="every">Refresh every (sec)</label><input id="every" type="number" min="10" value="30"></div>
+  </section>
+
+  <div class="src">
+    <span>XAU/USD: <b class="num" id="xau">—</b> /oz</span>
+    <span>USD/INR: <b class="num" id="fx">—</b></span>
+    <span>1 troy oz = 31.1035 g</span>
+    <button id="refresh" type="button">Refresh now</button>
+  </div>
+
+  <p class="note">Spot gold from gold-api.com, USD/INR from open.er-api.com (updated daily). Price per gram = (USD per oz ÷ 31.1035) × USD/INR × (1 + duty%). Jeweller making charges are extra. Prices are indicative, not a quote.</p>
+</div>
+
+<script>
+const OZ = 31.1035;
+const KARATS = [["24K", 0.999, "Pure / coins & bars"], ["22K", 0.916, "Jewellery"], ["18K", 0.750, "Diamond jewellery"]];
+const $ = id => document.getElementById(id);
+const inr = n => "₹" + Math.round(n).toLocaleString("en-IN");
+let xau = null, fxLive = null, fxTime = 0, history = [], firstPrice = null, lastSide = null, timer = null;
+
+function load(k, d){ try { return localStorage.getItem(k) ?? d; } catch { return d; } }
+function save(k, v){ try { localStorage.setItem(k, v); } catch {} }
+["duty","fxOverride","alertAt","every"].forEach(id => {
+  const v = load("gold-" + id, null); if (v !== null) $(id).value = v;
+  $(id).addEventListener("input", () => { save("gold-" + id, $(id).value); if (id === "every") schedule(); render(); });
+});
+
+async function fetchFx(){
+  if (fxLive && Date.now() - fxTime < 3600e3) return;
+  const r = await fetch("https://open.er-api.com/v6/latest/USD");
+  const j = await r.json();
+  fxLive = j.rates.INR; fxTime = Date.now();
+}
+async function fetchGold(){
+  const r = await fetch("https://api.gold-api.com/price/XAU");
+  const j = await r.json();
+  return j.price;
+}
+
+async function tick(){
+  try {
+    const [p] = await Promise.all([fetchGold(), fetchFx()]);
+    xau = p;
+    history.push(p); if (history.length > 240) history.shift();
+    if (firstPrice === null) firstPrice = p;
+    $("dot").className = "dot";
+    $("status").textContent = "Live · updated " + new Date().toLocaleTimeString();
+  } catch (e) {
+    $("dot").className = "dot err";
+    $("status").textContent = "Couldn't reach price feed, retrying…";
+  }
+  render();
+}
+
+function render(){
+  const fx = parseFloat($("fxOverride").value) || fxLive;
+  if (!xau || !fx) return;
+  const mult = 1 + (parseFloat($("duty").value) || 0) / 100;
+  const spotGram = xau / OZ * fx;
+  const gram24 = spotGram * mult;
+
+  $("xau").textContent = "$" + xau.toLocaleString("en-US", {maximumFractionDigits: 2});
+  $("fx").textContent = fx.toFixed(2);
+  $("hero10").textContent = inr(gram24 * 10);
+  $("heroGram").textContent = inr(gram24);
+  document.title = inr(gram24 * 10) + " · Gold in Rupees";
+
+  const d = xau - firstPrice, pct = d / firstPrice * 100;
+  const c = $("chg");
+  c.textContent = (d >= 0 ? "▲ " : "▼ ") + Math.abs(pct).toFixed(2) + "% since opened";
+  c.className = "chg num " + (d >= 0 ? "up" : "down");
+
+  $("rows").innerHTML = KARATS.map(([k, pur, use]) =>
+    `<tr><td><span class="karat">${k}</span>${use}</td>
+     <td class="num"><strong>${inr(spotGram * pur * mult)}</strong></td>
+     <td class="num">${inr(spotGram * pur * mult * 10)}</td>
+     <td class="num">${inr(spotGram * pur)}</td></tr>`).join("");
+
+  const alertAt = parseFloat($("alertAt").value);
+  if (alertAt) {
+    const side = gram24 * 10 >= alertAt ? "above" : "below";
+    if (lastSide && side !== lastSide) {
+      $("status").textContent = `Alert: 24K/10g is now ${side} ${inr(alertAt)}`;
+      try { new Notification("Gold alert", {body: `24K/10g ${inr(gram24*10)} is ${side} ${inr(alertAt)}`}); } catch {}
+    }
+    lastSide = side;
+  }
+  drawSpark();
+}
+
+function drawSpark(){
+  const cv = $("spark"), dpr = devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr);
+  if (history.length < 2) return;
+  const css = getComputedStyle(document.documentElement);
+  const gold = css.getPropertyValue("--gold").trim();
+  const lo = Math.min(...history), hi = Math.max(...history), span = hi - lo || 1;
+  const x = i => i / (history.length - 1) * (w - 6) + 3;
+  const y = v => h - 6 - (v - lo) / span * (h - 12);
+  g.beginPath(); history.forEach((v, i) => i ? g.lineTo(x(i), y(v)) : g.moveTo(x(i), y(v)));
+  g.strokeStyle = gold; g.lineWidth = 2; g.stroke();
+  g.lineTo(x(history.length - 1), h); g.lineTo(x(0), h); g.closePath();
+  g.globalAlpha = .12; g.fillStyle = gold; g.fill(); g.globalAlpha = 1;
+  g.beginPath(); g.arc(x(history.length - 1), y(history.at(-1)), 3.5, 0, 7); g.fillStyle = gold; g.fill();
+}
+
+function schedule(){
+  clearInterval(timer);
+  timer = setInterval(tick, Math.max(10, parseFloat($("every").value) || 30) * 1000);
+}
+$("refresh").onclick = tick;
+$("alertAt").addEventListener("change", () => { try { Notification.requestPermission(); } catch {} lastSide = null; });
+addEventListener("resize", drawSpark);
+tick(); schedule();
+</script>
+</body>
+</html>
